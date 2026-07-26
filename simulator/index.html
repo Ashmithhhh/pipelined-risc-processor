@@ -357,13 +357,13 @@
     <div id="ai-content" class="view-content ai-content" role="tabpanel" aria-labelledby="ai-tab" hidden>
       <section class="ai-hero">
         <div>
-          <p class="eyebrow">GEMINI · PIPE/5 COPILOT</p>
+          <p class="eyebrow">PIPE/5 CODE ASSISTANT</p>
           <h1>Describe the problem.<br><em>Get runnable assembly.</em></h1>
           <p>Generate, repair, explain, or optimize code specifically for your processor. Every AI result is checked by the local assembler before it can be loaded into the simulator.</p>
         </div>
         <div id="ai-connection-card" class="ai-connection-card checking">
           <span class="ai-orb" aria-hidden="true"></span>
-          <div><small>SERVER CONNECTION</small><strong id="ai-connection-title">Checking Gemini…</strong><em id="ai-model-name">Secure backend</em></div>
+          <div><small>AI SERVICE</small><strong id="ai-connection-title">Checking availability…</strong><em id="ai-model-name">Code generation</em></div>
         </div>
       </section>
 
@@ -371,7 +371,7 @@
         <article class="panel ai-request-panel">
           <header class="panel-header">
             <div><p class="section-kicker">01 · REQUEST</p><h2>What should the processor do?</h2></div>
-            <span class="count-badge">GEMINI</span>
+            <span class="count-badge">AI</span>
           </header>
           <div class="ai-mode-picker" role="group" aria-label="AI task">
             <button class="ai-mode active" type="button" data-ai-action="generate">Generate</button>
@@ -386,8 +386,8 @@
             <span>Include the current assembly editor contents</span>
           </label>
           <div class="ai-request-footer">
-            <p>The API key stays in <code>GEMINI_API_KEY</code> on the Node server and is never sent to this page.</p>
-            <button id="ai-submit" class="button button-primary ai-submit" type="button"><span aria-hidden="true">✦</span><span id="ai-submit-label">Ask Gemini</span></button>
+            <p>Every response is checked against the processor's instruction set before it can be loaded.</p>
+            <button id="ai-submit" class="button button-primary ai-submit" type="button"><span aria-hidden="true">✦</span><span id="ai-submit-label">Generate code</span></button>
           </div>
         </article>
 
@@ -399,7 +399,7 @@
           <div id="ai-empty-state" class="ai-empty-state">
             <span aria-hidden="true">✦</span>
             <strong>No response yet</strong>
-            <p>Choose an action, describe your problem, and ask Gemini. Generated assembly appears here for validation.</p>
+            <p>Generated assembly and its explanation will appear here.</p>
           </div>
           <div id="ai-result" class="ai-result" hidden>
             <div class="ai-code-head"><span>GENERATED ASSEMBLY</span><button id="ai-copy" class="mini-button" type="button">Copy</button></div>
@@ -421,7 +421,7 @@
         <article class="panel ai-info-card">
           <p class="section-kicker">SUPPORTED OUTPUT</p>
           <h2>Bound to your instruction set</h2>
-          <p>Gemini is prompted to use only <code>add sub and or slt addi lw sw beq j nop</code>, registers <code>r0–r31</code>, signed 16-bit immediates, labels, and word-aligned memory.</p>
+          <p>The assistant uses only <code>add sub and or slt addi lw sw beq j nop</code>, registers <code>r0–r31</code>, signed 16-bit immediates, labels, and word-aligned memory.</p>
         </article>
         <article class="panel ai-info-card">
           <p class="section-kicker">VALIDATION GATE</p>
@@ -429,10 +429,9 @@
           <p>The same deterministic assembler used by the simulator validates every result. Unsupported instructions, malformed operands, duplicate labels, and out-of-range values are sent to the Error Log.</p>
         </article>
         <article class="panel ai-info-card">
-          <p class="section-kicker">START THE BACKEND</p>
-          <h2>One environment variable</h2>
-          <code>GEMINI_API_KEY=your_key npm run serve</code>
-          <p>Optionally choose a compatible model with <code>GEMINI_MODEL</code>. The default is <code>gemini-2.5-flash</code>.</p>
+          <p class="section-kicker">PIPELINE AWARE</p>
+          <h2>Designed around your model</h2>
+          <p>The assistant understands the five-stage flow, register rules, memory limits, forwarding paths, load-use stalls, and branch flush behavior of PIPE/5.</p>
         </article>
       </section>
     </div>

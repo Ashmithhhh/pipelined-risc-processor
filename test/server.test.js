@@ -21,7 +21,6 @@ test("Gemini client requests structured JSON and normalizes its response", async
         assembly: "addi r1, r0, 2\naddi r2, r0, 3\nadd r3, r1, r2",
         explanation: "Uses forwarding.",
         assumptions: [],
-        warnings: [],
       }) }] } }],
     }), { status: 200, headers: { "content-type": "application/json" } });
   };
@@ -59,7 +58,7 @@ test("local server reports missing Gemini configuration without exposing a key",
     body: JSON.stringify({ action: "generate", prompt: "add values", code: "" }),
   });
   assert.equal(aiResponse.status, 503);
-  assert.match((await aiResponse.json()).error, /GEMINI_API_KEY/);
+  assert.match((await aiResponse.json()).error, /currently unavailable/);
 
   const pageResponse = await fetch(`${origin}/simulator/`);
   assert.equal(pageResponse.status, 200);

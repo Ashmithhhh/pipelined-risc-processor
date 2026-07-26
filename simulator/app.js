@@ -276,20 +276,20 @@ function setAiConnection(state, title, model) {
 }
 
 async function checkAiStatus() {
-  setAiConnection("checking", "Checking Gemini…", "Secure backend");
+  setAiConnection("checking", "Checking availability…", "Code generation service");
   try {
     const response = await fetch("/api/ai/status", { headers: { Accept: "application/json" } });
     if (!response.ok) throw new Error("AI endpoint is unavailable");
     const status = await response.json();
     aiConfigured = Boolean(status.configured);
     if (aiConfigured) {
-      setAiConnection("online", "Gemini ready", status.model || "Configured model");
+      setAiConnection("online", "AI ready", "Code generation online");
     } else {
-      setAiConnection("offline", "API key required", `Set GEMINI_API_KEY · ${status.model || "Gemini"}`);
+      setAiConnection("offline", "Service unavailable", "AI features are currently offline");
     }
   } catch {
     aiConfigured = false;
-    setAiConnection("offline", "Backend not running", "Start with npm run serve");
+    setAiConnection("offline", "Service unavailable", "AI features are currently offline");
   }
 }
 
@@ -319,7 +319,7 @@ function validateAiCode({ logSuccess = false } = {}) {
   if (!code) {
     setAiValidation("invalid", "NO CODE");
     $("#ai-load").disabled = true;
-    addDiagnostic("error", "AI VALIDATION", "Gemini did not return assembly code.");
+    addDiagnostic("error", "AI VALIDATION", "The response did not include assembly code.");
     return false;
   }
   setAiValidation("checking", "CHECKING");
@@ -343,19 +343,15 @@ function showAiResponse(response) {
   aiResponse = response;
   aiEmptyState.hidden = true;
   aiResult.hidden = false;
-  $("#ai-result-title").textContent = response.title || "Gemini response";
+  $("#ai-result-title").textContent = response.title || "AI response";
   aiResultCode.value = response.assembly || "";
   $("#ai-explanation-text").textContent = response.explanation || "No explanation was returned.";
-  const notes = [
-    ...(response.assumptions || []).map((text) => ({ kind: "assumption", text: `Assumption: ${text}` })),
-    ...(response.warnings || []).map((text) => ({ kind: "warning", text: `Warning: ${text}` })),
-  ];
+  const notes = (response.assumptions || []).map((text) => ({ kind: "assumption", text: `Assumption: ${text}` }));
   $("#ai-response-notes").innerHTML = notes.map((note) => `<div class="${note.kind}">${escapeHtml(note.text)}</div>`).join("");
-  for (const warning of response.warnings || []) addDiagnostic("warning", "GEMINI", warning);
   validateAiCode();
 }
 
-async function requestGemini() {
+async function requestAiCode() {
   const prompt = aiPrompt.value.trim();
   const code = aiIncludeSource.checked ? editor.value : "";
   if (!prompt && !code.trim()) {
@@ -364,7 +360,7 @@ async function requestGemini() {
     return;
   }
   if (!aiConfigured) {
-    addDiagnostic("error", "GEMINI", "Gemini is not configured.", { detail: "Set GEMINI_API_KEY and start the app with npm run serve." });
+    addDiagnostic("error", "AI SERVICE", "The AI service is currently unavailable.");
     return;
   }
 
@@ -383,11 +379,11 @@ async function requestGemini() {
     showAiResponse(payload);
   } catch (error) {
     setAiValidation("invalid", "REQUEST FAILED");
-    addDiagnostic("error", "GEMINI", error.message || "Gemini request failed.");
+    addDiagnostic("error", "AI SERVICE", error.message || "The AI request failed.");
   } finally {
     aiSubmit.disabled = false;
     aiSubmit.classList.remove("busy");
-    aiSubmitLabel.textContent = "Ask Gemini";
+    aiSubmitLabel.textContent = "Generate code";
   }
 }
 
@@ -397,7 +393,7 @@ function loadAiCode() {
   exampleSelect.value = "custom";
   updateLineNumbers();
   compileAndReset();
-  addDiagnostic("info", "AI ASSISTANT", "Validated Gemini program loaded into the simulator.");
+  addDiagnostic("info", "AI ASSISTANT", "Validated program loaded into the simulator.");
   switchView("simulator");
 }
 
@@ -623,7 +619,7 @@ function switchView(view, updateHash = true) {
   }
   document.title = showArchitecture
     ? "Architecture — PIPE/5 RISC Processor"
-    : showAi ? "Gemini AI Assistant — PIPE/5" : "PIPE/5 — Pipelined RISC Simulator";
+    : showAi ? "AI Code Assistant — PIPE/5" : "PIPE/5 — Pipelined RISC Simulator";
   if (updateHash) history.replaceState(null, "", `#${activeView}`);
   if (showArchitecture) renderArchitecture();
   if (showAi) checkAiStatus();
@@ -729,7 +725,7 @@ simulatorTab.addEventListener("click", () => switchView("simulator"));
 architectureTab.addEventListener("click", () => switchView("architecture"));
 aiTab.addEventListener("click", () => switchView("ai"));
 $("#open-simulator").addEventListener("click", () => switchView("simulator"));
-aiSubmit.addEventListener("click", requestGemini);
+aiSubmit.addEventListener("click", requestAiCode);
 $("#ai-validate").addEventListener("click", () => validateAiCode({ logSuccess: true }));
 $("#ai-load").addEventListener("click", loadAiCode);
 $("#ai-copy").addEventListener("click", copyAiCode);
@@ -743,7 +739,7 @@ aiResultCode.addEventListener("input", () => {
 aiPrompt.addEventListener("keydown", (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
     event.preventDefault();
-    requestGemini();
+    requestAiCode();
   }
 });
 

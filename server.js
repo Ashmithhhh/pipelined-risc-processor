@@ -32,9 +32,8 @@ const RESPONSE_SCHEMA = {
     assembly: { type: "STRING", description: "Complete assembly source compatible with the given ISA. Empty only if no code is relevant." },
     explanation: { type: "STRING", description: "Clear explanation of the approach and important pipeline behavior." },
     assumptions: { type: "ARRAY", items: { type: "STRING" } },
-    warnings: { type: "ARRAY", items: { type: "STRING" } },
   },
-  required: ["title", "assembly", "explanation", "assumptions", "warnings"],
+  required: ["title", "assembly", "explanation", "assumptions"],
 };
 
 export function buildSystemPrompt() {
@@ -72,7 +71,7 @@ function extractGeminiText(payload) {
   const parts = payload?.candidates?.[0]?.content?.parts;
   if (!Array.isArray(parts)) {
     const blocked = payload?.promptFeedback?.blockReason;
-    throw new Error(blocked ? `Gemini blocked the request: ${blocked}` : "Gemini returned no response text.");
+    throw new Error(blocked ? `The AI service blocked the request: ${blocked}` : "The AI service returned no response text.");
   }
   return parts.map((part) => part.text || "").join("").trim();
 }
@@ -80,18 +79,17 @@ function extractGeminiText(payload) {
 function parseStructuredText(text) {
   const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
   const result = JSON.parse(cleaned);
-  if (!result || typeof result !== "object") throw new Error("Gemini returned an invalid response object.");
+  if (!result || typeof result !== "object") throw new Error("The AI service returned an invalid response object.");
   return {
     title: String(result.title || "AI response").slice(0, 200),
     assembly: String(result.assembly || "").slice(0, 30000),
     explanation: String(result.explanation || "").slice(0, 30000),
     assumptions: Array.isArray(result.assumptions) ? result.assumptions.map(String).slice(0, 20) : [],
-    warnings: Array.isArray(result.warnings) ? result.warnings.map(String).slice(0, 20) : [],
   };
 }
 
 export async function callGemini({ apiKey, model = DEFAULT_MODEL, action, prompt, code, fetchImpl = fetch }) {
-  if (!apiKey) throw Object.assign(new Error("Gemini is not configured. Set GEMINI_API_KEY on the server."), { statusCode: 503 });
+  if (!apiKey) throw Object.assign(new Error("The AI service is currently unavailable."), { statusCode: 503 });
   if (!ACTIONS.has(action)) throw Object.assign(new Error("Unsupported AI action."), { statusCode: 400 });
   if (String(prompt || "").length > 12000 || String(code || "").length > 30000) {
     throw Object.assign(new Error("The request is too large."), { statusCode: 413 });
@@ -119,7 +117,7 @@ export async function callGemini({ apiKey, model = DEFAULT_MODEL, action, prompt
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const upstream = payload?.error?.message || `Gemini request failed with HTTP ${response.status}.`;
+    const upstream = payload?.error?.message || `AI request failed with HTTP ${response.status}.`;
     throw Object.assign(new Error(upstream), { statusCode: response.status === 429 ? 429 : 502 });
   }
   return { ...parseStructuredText(extractGeminiText(payload)), model };
@@ -247,6 +245,6 @@ if (isDirectRun) {
   server.listen(port, host, () => {
     const configured = Boolean(process.env.GEMINI_API_KEY);
     console.log(`PIPE/5 simulator: http://${host}:${port}/simulator/`);
-    console.log(`Gemini: ${configured ? `configured (${process.env.GEMINI_MODEL || DEFAULT_MODEL})` : "not configured — set GEMINI_API_KEY"}`);
+    console.log(`AI service: ${configured ? "ready" : "unavailable"}`);
   });
 }
