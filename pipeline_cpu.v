@@ -38,10 +38,11 @@ module pipeline_cpu (
     wire        jump_taken;
     wire [31:0] jump_target_addr;
 
-    // PC source selection: jump > branch > pc+4
-    assign pc_next = jump_taken   ? jump_target_addr  :
-                      branch_taken ? branch_target_addr :
-                      pc_plus4;
+    // PC source selection is oldest-first.  A taken branch in EX must beat
+    // a younger, wrong-path jump currently being decoded in ID.
+    assign pc_next = branch_taken ? branch_target_addr :
+                     jump_taken   ? jump_target_addr   :
+                     pc_plus4;
 
     // ========================================================
     // IF/ID PIPELINE REGISTER
@@ -121,9 +122,22 @@ module pipeline_cpu (
     wire       idex_mem_read; // ID/EX.MemRead
     wire       hazard_stall;
 
+    // Qualify rs/rt comparisons with the operands actually read by the ID
+    // instruction.  In ADDI/LW, rt is a destination; J has no register input.
+    wire id_uses_rs = (id_opcode == `OP_RTYPE) ||
+                      (id_opcode == `OP_ADDI)  ||
+                      (id_opcode == `OP_LW)    ||
+                      (id_opcode == `OP_SW)    ||
+                      (id_opcode == `OP_BEQ);
+    wire id_uses_rt = (id_opcode == `OP_RTYPE) ||
+                      (id_opcode == `OP_SW)    ||
+                      (id_opcode == `OP_BEQ);
+
     hazard_unit HAZ (
         .id_rs(id_rs),
         .id_rt(id_rt),
+        .id_uses_rs(id_uses_rs),
+        .id_uses_rt(id_uses_rt),
         .ex_rt(idex_rt),
         .ex_mem_read(idex_mem_read),
         .stall(hazard_stall)
@@ -224,7 +238,8 @@ module pipeline_cpu (
     // Branch resolution: taken if Branch control & ALU zero (BEQ)
     assign branch_taken = idex_branch & ex_zero;
     assign branch_target_addr = ex_branch_target;
-    assign jump_taken = id_jump; // jump resolved in ID (no register dependency)
+    // Suppress a younger wrong-path jump when an older branch is taken.
+    assign jump_taken = id_jump & ~branch_taken; // jump resolved in ID
 
     // ========================================================
     // EX/MEM PIPELINE REGISTER

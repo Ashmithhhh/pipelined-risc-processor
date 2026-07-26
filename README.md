@@ -1,6 +1,57 @@
 # 5-Stage Pipelined RISC Processor (Verilog)
 
-A classic MIPS-style 5-stage pipelined CPU implemented in Verilog.
+A classic MIPS-style 5-stage pipelined CPU implemented in Verilog, with a
+cycle-accurate interactive browser simulator.
+
+> **ISA note:** this is a small MIPS-style RISC subset, not the RISC-V ISA.
+> The instruction formats and opcodes intentionally match the Verilog design.
+
+## Interactive Simulator
+
+The simulator in [`simulator/`](simulator/) is a dependency-free behavioral
+companion to the RTL. It assembles source code (or accepts `program.hex`
+words), then exposes the state of every pipeline stage on each clock:
+
+- IF/ID/EX/MEM/WB instruction flow and machine-code listing
+- a dedicated **Architecture** tab with a live virtual datapath, clickable stage
+  inspector, model specifications, hazard flow, address equations, control
+  matrix, and RTL module map
+- EX/MEM and MEM/WB operand forwarding
+- source-aware load-use stalls and inserted bubbles
+- taken-branch and jump flushes
+- all 32 registers, data memory, CPI, and a 200-cycle trace
+- local `.asm`/`.hex` import, `program.hex` download, and CSV trace export
+- assembler errors with source line numbers
+
+Run it locally from the repository root:
+
+```bash
+npm run serve
+```
+
+Then open **<http://localhost:8000/simulator/>**. No `npm install` or build
+step is needed. Use **Assemble & reset**, then **Step cycle** or **Run**.
+Press `F10` to step from the keyboard. The editor supports:
+
+```text
+add sub and or slt
+addi
+lw sw
+beq j
+nop .word
+```
+
+Registers may be written as `r0`-`r31` (or standard MIPS aliases), branch and
+jump targets may use labels, and pasting one hexadecimal word per line is
+automatically recognized as `program.hex` input.
+
+The browser model is deliberately separate from the synthesizable RTL: it is
+fast and inspectable for teaching/debugging, while the Verilog remains the
+hardware source of truth. Directed tests cover forwarding, load-use hazards,
+stores/loads, branches, jumps, and signed `slt` behavior. For a useful UI stop
+condition, the browser marks addresses after the loaded source as invalid and
+halts after the pipeline drains; the RTL's initialized ROM returns zero/NOP
+words at those addresses and continues clocking.
 
 ## Pipeline Stages
 IF -> ID -> EX -> MEM -> WB
@@ -45,7 +96,11 @@ IF -> ID -> EX -> MEM -> WB
 | `mem_wb_reg.v` | MEM/WB pipeline register |
 | `pipeline_cpu.v` | Top-level module wiring all stages together |
 | `program.hex` | Sample machine-code program (hex, one instr/line) |
-| `tb_pipeline_cpu.v` | Testbench with cycle trace and result checks |
+| `tb_pipeline_cpu.v` | Self-checking sample-program RTL testbench with a cycle trace |
+| `tb_regression.v` | Directed RTL tests for stalls, redirects, and forwarding |
+| `simulator/` | Browser UI, assembler, and cycle-accurate behavioral model |
+| `test/simulator.test.js` | Directed behavioral simulator tests |
+| `Makefile` | JavaScript and Icarus Verilog test/serve commands |
 
 ## Sample Program (`program.hex`)
 ```
@@ -110,10 +165,22 @@ recompile/run.
   `r4 = 0` (skipped), `r5 = 11`, `r6 = 22`.
 
 ## How to Run a Different Test Program
+
+The easiest option is to paste a `.hex` file into the browser simulator. For
+RTL simulation, back up `program.hex`, copy the desired program, and rebuild:
+
 ```bash
+cp program.hex /tmp/program-main.hex
 cp test_programs/program_sum.hex program.hex
-vvp sim.out
+make test-hdl VVP_ARGS=+no-check
+cp /tmp/program-main.hex program.hex
 ```
+
+`tb_pipeline_cpu.v` is self-checking for `program_main.hex`. The `+no-check`
+plusarg keeps its cycle trace but skips those program-specific final
+assertions. For automated validation of another RTL program, update/add its
+expected checks. The browser simulator has no hard-coded final-state
+expectations.
 
 ## How to Simulate (Icarus Verilog)
 ```bash
@@ -145,6 +212,17 @@ r11 = 15
 r12 = 1
 mem[0] = 20
 ```
+
+## Automated Tests
+
+```bash
+npm test       # assembler + behavioral pipeline tests (Node.js)
+make test-hdl  # sample testbench + directed RTL regressions (Icarus Verilog)
+```
+
+The RTL regression suite specifically checks a true load-use stall, avoids
+false stalls on I-type destinations, verifies that an older taken branch beats
+a younger wrong-path jump, and checks forwarded store data.
 
 ## Waveform
 
@@ -223,7 +301,7 @@ MIT — see `LICENSE`.
 
 ## Notes / Possible Extensions
 - Currently single-cycle data memory; could add a memory stall path.
-- Branches resolved in EX (1-cycle penalty if taken, 2 instr flushed).
-  Could move to ID stage with early comparator for a 1-instr penalty.
+- Branches resolve in EX; a taken branch flushes the two younger instructions.
+  An ID-stage comparator could reduce this to one flushed instruction.
 - No exception/interrupt handling.
 - Could add a static/dynamic branch predictor to reduce branch penalty.

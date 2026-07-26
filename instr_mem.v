@@ -6,8 +6,13 @@ module instr_mem (
     output wire [31:0] instr
 );
     reg [31:0] mem [0:255]; // 256 words
+    integer i;
 
     initial begin
+        // Keep instruction fetch deterministic after the loaded program.
+        // Unspecified $readmemh locations would otherwise remain X.
+        for (i = 0; i < 256; i = i + 1)
+            mem[i] = 32'b0;
         $readmemh("program.hex", mem);
     end
 

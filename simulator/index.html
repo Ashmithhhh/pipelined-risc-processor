@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Cycle-accurate simulator and architecture explorer for a five-stage MIPS-style pipelined RISC processor.">
+  <title>PIPE/5 — Pipelined RISC Simulator</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a id="brand-home" class="brand" href="#simulator" aria-label="Open PIPE/5 simulator">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+      <span>
+        <strong>PIPE/5</strong>
+        <small>RISC PIPELINE LAB</small>
+      </span>
+    </a>
+    <div class="architecture-tag">
+      <span class="live-dot"></span>
+      MIPS-style · 32-bit · IF / ID / EX / MEM / WB
+    </div>
+    <nav class="view-tabs" role="tablist" aria-label="Application views">
+      <button id="simulator-tab" class="view-tab active" type="button" role="tab" aria-selected="true" aria-controls="simulator-content">Simulator</button>
+      <button id="architecture-tab" class="view-tab" type="button" role="tab" aria-selected="false" aria-controls="architecture-content">Architecture</button>
+    </nav>
+  </header>
+
+  <main>
+    <div id="simulator-content" class="view-content" role="tabpanel" aria-labelledby="simulator-tab">
+      <section class="hero" aria-labelledby="page-title">
+        <div>
+          <p class="eyebrow">INTERACTIVE HARDWARE MODEL</p>
+          <h1 id="page-title">See every instruction<br><em>move through the machine.</em></h1>
+        </div>
+        <p class="hero-copy">Assemble the supported instruction set, advance one clock at a time, and inspect forwarding, stalls, flushes, registers, and memory.</p>
+      </section>
+
+      <section class="control-deck panel" aria-label="Simulation controls">
+        <div class="control-group primary-controls">
+          <button id="assemble-button" class="button button-primary" type="button">
+            <span aria-hidden="true">◆</span> Assemble &amp; reset
+          </button>
+          <button id="step-button" class="button" type="button">
+            <span aria-hidden="true">→|</span> Step cycle
+          </button>
+          <button id="run-button" class="button" type="button">
+            <span id="run-icon" aria-hidden="true">▶</span> <span id="run-label">Run</span>
+          </button>
+          <button id="reset-button" class="button button-quiet" type="button" title="Reset the current assembled program">
+            <span aria-hidden="true">↺</span> Reset
+          </button>
+        </div>
+        <div class="control-group speed-control">
+          <label for="speed-select">CLOCK RATE</label>
+          <select id="speed-select">
+            <option value="1">1 cycle / sec</option>
+            <option value="2">2 cycles / sec</option>
+            <option value="5" selected>5 cycles / sec</option>
+            <option value="10">10 cycles / sec</option>
+            <option value="30">30 cycles / sec</option>
+          </select>
+        </div>
+        <div id="sim-state" class="state-pill ready"><span></span>READY</div>
+      </section>
+
+      <section class="workspace">
+        <article class="panel code-panel">
+          <header class="panel-header">
+            <div>
+              <p class="section-kicker">PROGRAM INPUT</p>
+              <h2>Assembly</h2>
+            </div>
+            <label class="sample-picker">EXAMPLE
+              <select id="example-select">
+                <option value="main">Full pipeline demo</option>
+                <option value="hazards">Data hazards</option>
+                <option value="control">Control flow</option>
+                <option value="custom" hidden>Custom program</option>
+              </select>
+            </label>
+          </header>
+          <div class="editor-toolbar">
+            <span>AUTO-DETECT · ASSEMBLY / HEX</span>
+            <div>
+              <label class="mini-button file-button" for="program-file">Import file</label>
+              <input id="program-file" type="file" accept=".asm,.s,.hex,.txt,text/plain" hidden>
+              <button id="download-hex" class="mini-button" type="button">Download .hex</button>
+            </div>
+          </div>
+          <div class="editor-wrap">
+            <div id="line-numbers" class="line-numbers" aria-hidden="true"></div>
+            <textarea id="source-editor" aria-label="Assembly source editor" spellcheck="false"></textarea>
+          </div>
+          <div id="source-message" class="source-message ok" role="status">
+            <span aria-hidden="true">✓</span>
+            <span>Assembly and program.hex words are accepted.</span>
+          </div>
+          <details class="isa-help">
+            <summary>Supported syntax</summary>
+            <p><code>add sub and or slt</code> · <code>addi</code> · <code>lw sw</code> · <code>beq</code> · <code>j</code> · <code>nop</code> · <code>.word</code></p>
+            <p>Use <code>r0</code>–<code>r31</code>, labels, decimal/hex immediates, and <code>offset(base)</code>. You can also paste one hexadecimal machine word per line from <code>program.hex</code>.</p>
+          </details>
+        </article>
+
+        <div class="machine-column">
+          <section class="stats-grid" aria-label="Simulation statistics">
+            <article class="stat-card"><span>CYCLE</span><strong id="stat-cycle">0</strong><small>clock edges</small></article>
+            <article class="stat-card"><span>RETIRED</span><strong id="stat-retired">0</strong><small>instructions</small></article>
+            <article class="stat-card accent"><span>CPI</span><strong id="stat-cpi">—</strong><small>cycles / instruction</small></article>
+            <article class="stat-card warn"><span>STALLS</span><strong id="stat-stalls">0</strong><small>load-use bubbles</small></article>
+            <article class="stat-card danger"><span>FLUSHES</span><strong id="stat-flushes">0</strong><small>control redirects</small></article>
+          </section>
+
+          <section class="panel pipeline-panel" aria-labelledby="pipeline-title">
+            <header class="panel-header compact">
+              <div>
+                <p class="section-kicker">LIVE DATAPATH</p>
+                <h2 id="pipeline-title">Pipeline state</h2>
+              </div>
+              <div class="legend"><span><i class="bubble-key"></i>Bubble</span><span><i class="active-key"></i>Valid</span></div>
+            </header>
+            <div id="pipeline" class="pipeline" aria-live="polite"></div>
+            <div id="event-banner" class="event-banner neutral">
+              <span class="event-icon" aria-hidden="true">○</span>
+              <div><strong>Awaiting first clock</strong><small>Press Step cycle or Run.</small></div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="lower-grid">
+        <article class="panel listing-panel">
+          <header class="panel-header compact">
+            <div><p class="section-kicker">INSTRUCTION ROM</p><h2>Machine listing</h2></div>
+            <span id="word-count" class="count-badge">0 WORDS</span>
+          </header>
+          <div class="table-scroll listing-scroll">
+            <table>
+              <thead><tr><th>PC</th><th>WORD</th><th>INSTRUCTION</th></tr></thead>
+              <tbody id="listing-body"></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel register-panel">
+          <header class="panel-header compact">
+            <div><p class="section-kicker">ARCHITECTURAL STATE</p><h2>Register file</h2></div>
+            <div class="segmented" role="group" aria-label="Register number format">
+              <button id="radix-hex" class="active" type="button">HEX</button>
+              <button id="radix-dec" type="button">SIGNED</button>
+            </div>
+          </header>
+          <div id="register-grid" class="register-grid"></div>
+        </article>
+
+        <article class="panel memory-panel">
+          <header class="panel-header compact">
+            <div><p class="section-kicker">DATA RAM</p><h2>Memory</h2></div>
+            <span class="count-badge">256 WORDS</span>
+          </header>
+          <div class="table-scroll memory-scroll">
+            <table>
+              <thead><tr><th>ADDRESS</th><th>INDEX</th><th>VALUE</th></tr></thead>
+              <tbody id="memory-body"></tbody>
+            </table>
+          </div>
+          <p class="table-note">Showing the first 16 words and any other non-zero words.</p>
+        </article>
+      </section>
+
+      <section class="panel trace-panel" aria-labelledby="trace-title">
+        <header class="panel-header compact">
+          <div><p class="section-kicker">CLOCK HISTORY</p><h2 id="trace-title">Cycle trace</h2></div>
+          <div class="trace-actions">
+            <span class="trace-note">Newest edge first · last 200 cycles</span>
+            <button id="download-trace" class="mini-button" type="button">Export CSV</button>
+          </div>
+        </header>
+        <div class="table-scroll trace-scroll">
+          <table>
+            <thead><tr><th>CYCLE</th><th>PC</th><th>EX STAGE</th><th>CONTROL</th><th>FWD A</th><th>FWD B</th><th>COMMIT</th></tr></thead>
+            <tbody id="trace-body"><tr class="empty-row"><td colspan="7">No clock edges recorded yet.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <div id="architecture-content" class="view-content architecture-content" role="tabpanel" aria-labelledby="architecture-tab" hidden>
+      <section class="architecture-hero">
+        <div>
+          <p class="eyebrow">YOUR PROCESSOR · EXPLAINED</p>
+          <h1>A five-stage RISC pipeline,<br><em>from RTL to every signal.</em></h1>
+          <p>Your model is a compact 32-bit MIPS-style Harvard processor. It overlaps five instructions, resolves data dependencies with bypass paths, and recovers from control-flow changes by flushing younger work.</p>
+        </div>
+        <div class="model-id-card">
+          <span>MODEL PROFILE</span>
+          <strong>PIPE/5–M32</strong>
+          <div><b>ISA</b><em>MIPS-style subset</em></div>
+          <div><b>PIPELINE</b><em>5 stages · in order</em></div>
+          <div><b>MEMORY</b><em>Harvard · 1 KiB + 1 KiB</em></div>
+          <div><b>HAZARDS</b><em>Forward · stall · flush</em></div>
+        </div>
+      </section>
+
+      <section class="architecture-controls panel" aria-label="Architecture flow controls">
+        <div>
+          <p class="section-kicker">LIVE ARCHITECTURE</p>
+          <strong>Cycle <span id="architecture-cycle">0</span></strong>
+          <small id="architecture-live-state">Ready to inspect</small>
+        </div>
+        <div class="architecture-control-buttons">
+          <button id="architecture-step" class="button button-primary" type="button">→| Step flow</button>
+          <button id="architecture-run" class="button" type="button"><span id="architecture-run-icon">▶</span> <span id="architecture-run-label">Run</span></button>
+          <button id="architecture-reset" class="button button-quiet" type="button">↺ Reset</button>
+          <button id="open-simulator" class="button button-quiet" type="button">Edit program</button>
+        </div>
+      </section>
+
+      <section class="panel architecture-flow-panel" aria-labelledby="architecture-flow-title">
+        <header class="panel-header">
+          <div>
+            <p class="section-kicker">VIRTUAL ARCHITECTURE FLOW</p>
+            <h2 id="architecture-flow-title">Instruction and signal datapath</h2>
+          </div>
+          <div class="flow-legend">
+            <span><i class="legend-main"></i>Instruction</span>
+            <span><i class="legend-forward"></i>Forwarding</span>
+            <span><i class="legend-control"></i>Redirect</span>
+            <span><i class="legend-writeback"></i>Write-back</span>
+          </div>
+        </header>
+
+        <div class="datapath-shell">
+          <div class="datapath-input">
+            <span>PC</span><strong id="architecture-pc">0x00000000</strong><small>byte address</small>
+          </div>
+          <div id="architecture-stages" class="architecture-stages" aria-live="polite"></div>
+
+          <div class="signal-lanes" aria-label="Datapath feedback paths">
+            <div class="signal-lane forwarding-lane" id="forwarding-lane"><span>EX/MEM + MEM/WB</span><i></i><strong>operand forwarding → ALU mux A/B</strong></div>
+            <div class="signal-lane redirect-lane" id="redirect-lane"><span>EX branch / ID jump</span><i></i><strong>control target → PC select</strong></div>
+            <div class="signal-lane writeback-lane" id="writeback-lane"><span>WB result</span><i></i><strong>register write → decode register file</strong></div>
+          </div>
+        </div>
+
+        <div id="architecture-event" class="architecture-event neutral">
+          <span>LAST CLOCK</span><strong>Awaiting the first edge</strong><small>Use Step flow to watch instructions and feedback paths become active.</small>
+        </div>
+      </section>
+
+      <section class="architecture-detail-grid">
+        <article class="panel stage-inspector">
+          <header class="panel-header compact">
+            <div><p class="section-kicker">STAGE INSPECTOR</p><h2 id="inspector-title">IF · Instruction Fetch</h2></div>
+            <span id="inspector-file" class="count-badge">pc.v + instr_mem.v</span>
+          </header>
+          <div id="inspector-content" class="inspector-content"></div>
+        </article>
+
+        <article class="panel model-at-glance">
+          <header class="panel-header compact"><div><p class="section-kicker">MODEL DETAILS</p><h2>What you built</h2></div></header>
+          <div class="model-facts">
+            <div><span>DATA WIDTH</span><strong>32 bit</strong><small>registers, ALU, PC and memory words</small></div>
+            <div><span>REGISTER FILE</span><strong>32 × 32</strong><small>two read ports, one write port, r0 = zero</small></div>
+            <div><span>INSTRUCTION ROM</span><strong>256 words</strong><small>word indexed by PC[9:2], loaded by $readmemh</small></div>
+            <div><span>DATA RAM</span><strong>256 words</strong><small>asynchronous read, clocked store</small></div>
+            <div><span>ISSUE / COMMIT</span><strong>In order</strong><small>up to one instruction each cycle</small></div>
+            <div><span>BRANCH POLICY</span><strong>Not taken</strong><small>fetch sequentially, flush when BEQ resolves taken</small></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="architecture-notes-grid">
+        <article class="panel architecture-note-card">
+          <span class="note-number">01</span>
+          <p class="section-kicker">CLOCK JOURNEY</p>
+          <h2>What happens on every cycle</h2>
+          <ol class="clock-journey">
+            <li><b>IF</b><span>Read instruction at PC and calculate PC + 4.</span></li>
+            <li><b>ID</b><span>Decode opcode, read rs/rt, extend immediate and detect load-use hazards.</span></li>
+            <li><b>EX</b><span>Select forwarded operands, run the ALU and resolve BEQ.</span></li>
+            <li><b>MEM</b><span>Read or write data RAM using the ALU result as an address.</span></li>
+            <li><b>WB</b><span>Select memory data or ALU result and update the destination register.</span></li>
+          </ol>
+        </article>
+
+        <article class="panel architecture-note-card hazard-card">
+          <span class="note-number">02</span>
+          <p class="section-kicker">HAZARD SYSTEM</p>
+          <h2>How correctness is preserved</h2>
+          <div class="hazard-list">
+            <div><i class="hazard-forward"></i><strong>ALU dependency</strong><span>Forward EX/MEM first, then MEM/WB, with no stall.</span></div>
+            <div><i class="hazard-stall"></i><strong>Load-use dependency</strong><span>Freeze PC + IF/ID and inject one ID/EX bubble.</span></div>
+            <div><i class="hazard-branch"></i><strong>Taken BEQ</strong><span>Resolve in EX, redirect PC and flush two younger instructions.</span></div>
+            <div><i class="hazard-jump"></i><strong>Jump</strong><span>Resolve in ID, redirect PC and flush the sequential fetch.</span></div>
+          </div>
+        </article>
+
+        <article class="panel architecture-note-card">
+          <span class="note-number">03</span>
+          <p class="section-kicker">ADDRESSING</p>
+          <h2>Memory and targets</h2>
+          <div class="equation-list">
+            <div><span>Sequential PC</span><code>PCnext = PC + 4</code></div>
+            <div><span>Branch target</span><code>(PC + 4) + (signImm &lt;&lt; 2)</code></div>
+            <div><span>Jump target</span><code>{ PC+4[31:28], target[25:0], 2'b00 }</code></div>
+            <div><span>RAM word index</span><code>address[9:2]</code></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel control-matrix-panel">
+        <header class="panel-header">
+          <div><p class="section-kicker">CONTROL UNIT</p><h2>Decoded control-signal matrix</h2></div>
+          <span class="count-badge">control_unit.v</span>
+        </header>
+        <div class="table-scroll">
+          <table id="control-matrix" class="control-matrix">
+            <thead><tr><th>INSTRUCTION</th><th>RegDst</th><th>ALUSrc</th><th>MemRead</th><th>MemWrite</th><th>MemToReg</th><th>RegWrite</th><th>Branch</th><th>Jump</th><th>ALUOp</th></tr></thead>
+            <tbody>
+              <tr><td>R-type</td><td>1</td><td>0</td><td>0</td><td>0</td><td>0</td><td class="signal-on">1</td><td>0</td><td>0</td><td>10</td></tr>
+              <tr><td>addi</td><td>0</td><td class="signal-on">1</td><td>0</td><td>0</td><td>0</td><td class="signal-on">1</td><td>0</td><td>0</td><td>00</td></tr>
+              <tr><td>lw</td><td>0</td><td class="signal-on">1</td><td class="signal-on">1</td><td>0</td><td class="signal-on">1</td><td class="signal-on">1</td><td>0</td><td>0</td><td>00</td></tr>
+              <tr><td>sw</td><td>×</td><td class="signal-on">1</td><td>0</td><td class="signal-on">1</td><td>×</td><td>0</td><td>0</td><td>0</td><td>00</td></tr>
+              <tr><td>beq</td><td>×</td><td>0</td><td>0</td><td>0</td><td>×</td><td>0</td><td class="signal-on control-signal">1</td><td>0</td><td>01</td></tr>
+              <tr><td>j</td><td>×</td><td>×</td><td>0</td><td>0</td><td>×</td><td>0</td><td>0</td><td class="signal-on control-signal">1</td><td>×</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="module-map">
+        <header>
+          <p class="section-kicker">RTL MODULE MAP</p>
+          <h2>How the Verilog files form the processor</h2>
+        </header>
+        <div class="module-grid">
+          <div><code>pipeline_cpu.v</code><span>Top-level datapath and stage wiring</span></div>
+          <div><code>control_unit.v</code><span>Main opcode decoder</span></div>
+          <div><code>alu.v + alu_control.v</code><span>Arithmetic, logic and function decode</span></div>
+          <div><code>reg_file.v</code><span>32 registers and same-cycle WB bypass</span></div>
+          <div><code>hazard_unit.v</code><span>Source-aware load-use detector</span></div>
+          <div><code>forwarding_unit.v</code><span>EX/MEM and MEM/WB operand selection</span></div>
+          <div><code>*_reg.v</code><span>Four clocked inter-stage register banks</span></div>
+          <div><code>instr_mem.v + data_mem.v</code><span>Separate Harvard instruction and data memories</span></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer>
+    <span>Behavioral companion to <code>pipeline_cpu.v</code></span>
+    <span>32 registers · 256 instruction words · 256 data words</span>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
