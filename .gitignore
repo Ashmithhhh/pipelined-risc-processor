@@ -5,3 +5,6 @@ wave.vcd
 downloads/
 pipelined-risc-processor-simulator.zip
 pipelined-risc-processor-simulator.tar.gz
+.env
+.env.*
+!.env.example

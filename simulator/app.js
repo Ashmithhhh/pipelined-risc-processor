@@ -26,13 +26,25 @@ const downloadTraceButton = $("#download-trace");
 const simState = $("#sim-state");
 const simulatorTab = $("#simulator-tab");
 const architectureTab = $("#architecture-tab");
+const aiTab = $("#ai-tab");
 const simulatorContent = $("#simulator-content");
 const architectureContent = $("#architecture-content");
+const aiContent = $("#ai-content");
 const architectureStep = $("#architecture-step");
 const architectureRun = $("#architecture-run");
 const architectureRunIcon = $("#architecture-run-icon");
 const architectureRunLabel = $("#architecture-run-label");
 const architectureReset = $("#architecture-reset");
+const aiPrompt = $("#ai-prompt");
+const aiIncludeSource = $("#ai-include-source");
+const aiSubmit = $("#ai-submit");
+const aiSubmitLabel = $("#ai-submit-label");
+const aiResult = $("#ai-result");
+const aiEmptyState = $("#ai-empty-state");
+const aiResultCode = $("#ai-result-code");
+const errorDrawer = $("#error-drawer");
+const errorBackdrop = $("#error-backdrop");
+const errorLogToggle = $("#error-log-toggle");
 
 let simulator = null;
 let runTimer = null;
@@ -40,6 +52,11 @@ let radix = "hex";
 let sourceDirty = false;
 let activeView = "simulator";
 let selectedArchitectureStage = "IF";
+let aiAction = "generate";
+let aiResponse = null;
+let aiConfigured = false;
+let diagnostics = [];
+let nextDiagnosticId = 1;
 
 function escapeHtml(value) {
   return String(value)
@@ -64,6 +81,59 @@ function downloadText(filename, text, type = "text/plain;charset=utf-8") {
 function csvCell(value) {
   const text = String(value ?? "");
   return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+function renderDiagnostics() {
+  const list = $("#error-log-list");
+  const errorCount = diagnostics.filter((entry) => entry.level === "error").length;
+  $("#error-count").textContent = diagnostics.length;
+  $("#error-summary").textContent = diagnostics.length === 0
+    ? "No errors recorded"
+    : `${errorCount} error${errorCount === 1 ? "" : "s"} · ${diagnostics.length} total event${diagnostics.length === 1 ? "" : "s"}`;
+  errorLogToggle.classList.toggle("has-errors", errorCount > 0);
+  if (diagnostics.length === 0) {
+    list.innerHTML = '<div class="error-log-empty"><span>✓</span><strong>Everything looks clean</strong><small>Assembler and AI diagnostics will appear here.</small></div>';
+    return;
+  }
+  list.innerHTML = diagnostics.map((entry) => `
+    <article class="log-entry ${entry.level}">
+      <div class="log-entry-head"><span class="log-entry-level">${escapeHtml(entry.level)} · ${escapeHtml(entry.source)}</span><span class="log-entry-time">${escapeHtml(entry.time)}</span></div>
+      <strong>${escapeHtml(entry.message)}</strong>
+      ${entry.detail ? `<div class="log-entry-detail">${escapeHtml(entry.detail)}</div>` : ""}
+      <div class="log-entry-footer">
+        <span class="log-entry-source">${entry.line ? `SOURCE LINE ${entry.line}` : `EVENT #${entry.id}`}</span>
+        ${entry.line ? `<button class="log-line-link" type="button" data-log-line="${entry.line}" data-log-target="${entry.target}">Open line ${entry.line}</button>` : ""}
+      </div>
+    </article>
+  `).join("");
+}
+
+function openErrorLog() {
+  errorDrawer.hidden = false;
+  errorBackdrop.hidden = false;
+  errorLogToggle.setAttribute("aria-expanded", "true");
+}
+
+function closeErrorLog() {
+  errorDrawer.hidden = true;
+  errorBackdrop.hidden = true;
+  errorLogToggle.setAttribute("aria-expanded", "false");
+}
+
+function addDiagnostic(level, source, message, options = {}) {
+  diagnostics.unshift({
+    id: nextDiagnosticId++,
+    level,
+    source,
+    message,
+    detail: options.detail || "",
+    line: options.line || null,
+    target: options.target || "editor",
+    time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+  });
+  if (diagnostics.length > 100) diagnostics.length = 100;
+  renderDiagnostics();
+  if (options.open || level === "error") openErrorLog();
 }
 
 function updateLineNumbers() {
@@ -106,6 +176,8 @@ function compileAndReset() {
     const message = error instanceof AssemblyError ? error.message : `Unexpected error: ${error.message}`;
     setSourceMessage("error", message);
     setState("error", "ERROR");
+    const sourceLine = error.line != null ? editor.value.split("\n")[error.line - 1]?.trim() : "";
+    addDiagnostic("error", "ASSEMBLER", message, { line: error.line, detail: sourceLine });
     stepButton.disabled = true;
     runButton.disabled = true;
     architectureStep.disabled = true;
@@ -187,10 +259,155 @@ async function importProgramFile(file) {
     updateLineNumbers();
     compileAndReset();
   } catch (error) {
-    setSourceMessage("error", `Could not read ${file.name}: ${error.message}`);
+    const message = `Could not read ${file.name}: ${error.message}`;
+    setSourceMessage("error", message);
     setState("error", "ERROR");
+    addDiagnostic("error", "FILE IMPORT", message);
   } finally {
     programFile.value = "";
+  }
+}
+
+function setAiConnection(state, title, model) {
+  const card = $("#ai-connection-card");
+  card.className = `ai-connection-card ${state}`;
+  $("#ai-connection-title").textContent = title;
+  $("#ai-model-name").textContent = model;
+}
+
+async function checkAiStatus() {
+  setAiConnection("checking", "Checking Gemini…", "Secure backend");
+  try {
+    const response = await fetch("/api/ai/status", { headers: { Accept: "application/json" } });
+    if (!response.ok) throw new Error("AI endpoint is unavailable");
+    const status = await response.json();
+    aiConfigured = Boolean(status.configured);
+    if (aiConfigured) {
+      setAiConnection("online", "Gemini ready", status.model || "Configured model");
+    } else {
+      setAiConnection("offline", "API key required", `Set GEMINI_API_KEY · ${status.model || "Gemini"}`);
+    }
+  } catch {
+    aiConfigured = false;
+    setAiConnection("offline", "Backend not running", "Start with npm run serve");
+  }
+}
+
+function setAiMode(action) {
+  aiAction = action;
+  document.querySelectorAll("[data-ai-action]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.aiAction === action);
+  });
+  const placeholders = {
+    generate: "Example: Add the numbers from 1 to 10, put the result in r3, and store it at memory address 0.",
+    fix: "Describe the wrong result or error. The current editor source will be sent for repair.",
+    explain: "What would you like explained about the current program and its pipeline behavior?",
+    optimize: "Describe the goal, such as reducing stalls or making the loop shorter.",
+  };
+  aiPrompt.placeholder = placeholders[action];
+  if (action !== "generate") aiIncludeSource.checked = true;
+}
+
+function setAiValidation(state, text) {
+  const badge = $("#ai-validation-badge");
+  badge.className = `validation-badge ${state}`;
+  badge.textContent = text;
+}
+
+function validateAiCode({ logSuccess = false } = {}) {
+  const code = aiResultCode.value.trim();
+  if (!code) {
+    setAiValidation("invalid", "NO CODE");
+    $("#ai-load").disabled = true;
+    addDiagnostic("error", "AI VALIDATION", "Gemini did not return assembly code.");
+    return false;
+  }
+  setAiValidation("checking", "CHECKING");
+  try {
+    const compiled = compileProgram(code);
+    setAiValidation("valid", `${compiled.words.length} WORDS · VALID`);
+    $("#ai-load").disabled = false;
+    if (logSuccess) addDiagnostic("info", "AI VALIDATION", `Generated program is valid (${compiled.words.length} instructions).`);
+    return true;
+  } catch (error) {
+    const message = error instanceof AssemblyError ? error.message : error.message || "Validation failed.";
+    const sourceLine = error.line != null ? code.split("\n")[error.line - 1]?.trim() : "";
+    setAiValidation("invalid", "INVALID");
+    $("#ai-load").disabled = true;
+    addDiagnostic("error", "AI VALIDATION", message, { line: error.line, detail: sourceLine, target: "ai" });
+    return false;
+  }
+}
+
+function showAiResponse(response) {
+  aiResponse = response;
+  aiEmptyState.hidden = true;
+  aiResult.hidden = false;
+  $("#ai-result-title").textContent = response.title || "Gemini response";
+  aiResultCode.value = response.assembly || "";
+  $("#ai-explanation-text").textContent = response.explanation || "No explanation was returned.";
+  const notes = [
+    ...(response.assumptions || []).map((text) => ({ kind: "assumption", text: `Assumption: ${text}` })),
+    ...(response.warnings || []).map((text) => ({ kind: "warning", text: `Warning: ${text}` })),
+  ];
+  $("#ai-response-notes").innerHTML = notes.map((note) => `<div class="${note.kind}">${escapeHtml(note.text)}</div>`).join("");
+  for (const warning of response.warnings || []) addDiagnostic("warning", "GEMINI", warning);
+  validateAiCode();
+}
+
+async function requestGemini() {
+  const prompt = aiPrompt.value.trim();
+  const code = aiIncludeSource.checked ? editor.value : "";
+  if (!prompt && !code.trim()) {
+    addDiagnostic("error", "AI REQUEST", "Describe a problem or include the current assembly source.");
+    aiPrompt.focus();
+    return;
+  }
+  if (!aiConfigured) {
+    addDiagnostic("error", "GEMINI", "Gemini is not configured.", { detail: "Set GEMINI_API_KEY and start the app with npm run serve." });
+    return;
+  }
+
+  aiSubmit.disabled = true;
+  aiSubmit.classList.add("busy");
+  aiSubmitLabel.textContent = "Thinking…";
+  setAiValidation("checking", "GENERATING");
+  try {
+    const response = await fetch("/api/ai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ action: aiAction, prompt, code }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || `AI request failed with HTTP ${response.status}.`);
+    showAiResponse(payload);
+  } catch (error) {
+    setAiValidation("invalid", "REQUEST FAILED");
+    addDiagnostic("error", "GEMINI", error.message || "Gemini request failed.");
+  } finally {
+    aiSubmit.disabled = false;
+    aiSubmit.classList.remove("busy");
+    aiSubmitLabel.textContent = "Ask Gemini";
+  }
+}
+
+function loadAiCode() {
+  if (!validateAiCode()) return;
+  editor.value = aiResultCode.value.trim() + "\n";
+  exampleSelect.value = "custom";
+  updateLineNumbers();
+  compileAndReset();
+  addDiagnostic("info", "AI ASSISTANT", "Validated Gemini program loaded into the simulator.");
+  switchView("simulator");
+}
+
+async function copyAiCode() {
+  try {
+    await navigator.clipboard.writeText(aiResultCode.value);
+    $("#ai-copy").textContent = "Copied";
+    window.setTimeout(() => { $("#ai-copy").textContent = "Copy"; }, 1200);
+  } catch (error) {
+    addDiagnostic("error", "CLIPBOARD", `Could not copy code: ${error.message}`);
   }
 }
 
@@ -393,19 +610,23 @@ function renderArchitecture() {
 }
 
 function switchView(view, updateHash = true) {
-  activeView = view === "architecture" ? "architecture" : "simulator";
+  activeView = ["architecture", "ai"].includes(view) ? view : "simulator";
+  const showSimulator = activeView === "simulator";
   const showArchitecture = activeView === "architecture";
-  simulatorContent.hidden = showArchitecture;
+  const showAi = activeView === "ai";
+  simulatorContent.hidden = !showSimulator;
   architectureContent.hidden = !showArchitecture;
-  simulatorTab.classList.toggle("active", !showArchitecture);
-  architectureTab.classList.toggle("active", showArchitecture);
-  simulatorTab.setAttribute("aria-selected", String(!showArchitecture));
-  architectureTab.setAttribute("aria-selected", String(showArchitecture));
+  aiContent.hidden = !showAi;
+  for (const [tab, selected] of [[simulatorTab, showSimulator], [architectureTab, showArchitecture], [aiTab, showAi]]) {
+    tab.classList.toggle("active", selected);
+    tab.setAttribute("aria-selected", String(selected));
+  }
   document.title = showArchitecture
     ? "Architecture — PIPE/5 RISC Processor"
-    : "PIPE/5 — Pipelined RISC Simulator";
-  if (updateHash) history.replaceState(null, "", showArchitecture ? "#architecture" : "#simulator");
+    : showAi ? "Gemini AI Assistant — PIPE/5" : "PIPE/5 — Pipelined RISC Simulator";
+  if (updateHash) history.replaceState(null, "", `#${activeView}`);
   if (showArchitecture) renderArchitecture();
+  if (showAi) checkAiStatus();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -506,7 +727,46 @@ architectureRun.addEventListener("click", toggleRunning);
 architectureReset.addEventListener("click", resetCurrent);
 simulatorTab.addEventListener("click", () => switchView("simulator"));
 architectureTab.addEventListener("click", () => switchView("architecture"));
+aiTab.addEventListener("click", () => switchView("ai"));
 $("#open-simulator").addEventListener("click", () => switchView("simulator"));
+aiSubmit.addEventListener("click", requestGemini);
+$("#ai-validate").addEventListener("click", () => validateAiCode({ logSuccess: true }));
+$("#ai-load").addEventListener("click", loadAiCode);
+$("#ai-copy").addEventListener("click", copyAiCode);
+document.querySelectorAll("[data-ai-action]").forEach((button) => {
+  button.addEventListener("click", () => setAiMode(button.dataset.aiAction));
+});
+aiResultCode.addEventListener("input", () => {
+  setAiValidation("idle", "EDITED · REVALIDATE");
+  $("#ai-load").disabled = true;
+});
+aiPrompt.addEventListener("keydown", (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+    event.preventDefault();
+    requestGemini();
+  }
+});
+
+errorLogToggle.addEventListener("click", () => errorDrawer.hidden ? openErrorLog() : closeErrorLog());
+$("#error-log-close").addEventListener("click", closeErrorLog);
+errorBackdrop.addEventListener("click", closeErrorLog);
+$("#error-log-clear").addEventListener("click", () => {
+  diagnostics = [];
+  renderDiagnostics();
+});
+$("#error-log-list").addEventListener("click", (event) => {
+  const link = event.target.closest("[data-log-line]");
+  if (!link) return;
+  const target = link.dataset.logTarget === "ai" ? aiResultCode : editor;
+  const line = Number(link.dataset.logLine);
+  switchView(link.dataset.logTarget === "ai" ? "ai" : "simulator");
+  closeErrorLog();
+  const lines = target.value.split("\n");
+  const start = lines.slice(0, line - 1).reduce((sum, text) => sum + text.length + 1, 0);
+  target.focus();
+  target.setSelectionRange(start, start + (lines[line - 1]?.length || 0));
+});
+
 $("#brand-home").addEventListener("click", (event) => {
   event.preventDefault();
   switchView("simulator");
@@ -518,7 +778,8 @@ $("#architecture-stages").addEventListener("click", (event) => {
   renderArchitecture();
 });
 window.addEventListener("hashchange", () => {
-  switchView(location.hash === "#architecture" ? "architecture" : "simulator", false);
+  const view = location.hash === "#architecture" ? "architecture" : location.hash === "#ai" ? "ai" : "simulator";
+  switchView(view, false);
 });
 
 speedSelect.addEventListener("change", () => {
@@ -561,6 +822,7 @@ editor.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !errorDrawer.hidden) closeErrorLog();
   if (event.key === "F10") {
     event.preventDefault();
     stepCycle();
@@ -585,5 +847,9 @@ $("#radix-dec").addEventListener("click", () => {
 
 editor.value = EXAMPLES.main;
 updateLineNumbers();
+renderDiagnostics();
+setAiMode("generate");
 compileAndReset();
-switchView(location.hash === "#architecture" ? "architecture" : "simulator", false);
+const initialView = location.hash === "#architecture" ? "architecture" : location.hash === "#ai" ? "ai" : "simulator";
+switchView(initialView, false);
+if (initialView !== "ai") checkAiStatus();

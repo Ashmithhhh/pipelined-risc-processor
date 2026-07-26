@@ -20,10 +20,16 @@
       <span class="live-dot"></span>
       MIPS-style · 32-bit · IF / ID / EX / MEM / WB
     </div>
-    <nav class="view-tabs" role="tablist" aria-label="Application views">
-      <button id="simulator-tab" class="view-tab active" type="button" role="tab" aria-selected="true" aria-controls="simulator-content">Simulator</button>
-      <button id="architecture-tab" class="view-tab" type="button" role="tab" aria-selected="false" aria-controls="architecture-content">Architecture</button>
-    </nav>
+    <div class="top-actions">
+      <nav class="view-tabs" role="tablist" aria-label="Application views">
+        <button id="simulator-tab" class="view-tab active" type="button" role="tab" aria-selected="true" aria-controls="simulator-content">Simulator</button>
+        <button id="architecture-tab" class="view-tab" type="button" role="tab" aria-selected="false" aria-controls="architecture-content">Architecture</button>
+        <button id="ai-tab" class="view-tab" type="button" role="tab" aria-selected="false" aria-controls="ai-content">AI</button>
+      </nav>
+      <button id="error-log-toggle" class="error-log-toggle" type="button" aria-controls="error-drawer" aria-expanded="false">
+        Log <span id="error-count">0</span>
+      </button>
+    </div>
   </header>
 
   <main>
@@ -347,7 +353,105 @@
         </div>
       </section>
     </div>
+
+    <div id="ai-content" class="view-content ai-content" role="tabpanel" aria-labelledby="ai-tab" hidden>
+      <section class="ai-hero">
+        <div>
+          <p class="eyebrow">GEMINI · PIPE/5 COPILOT</p>
+          <h1>Describe the problem.<br><em>Get runnable assembly.</em></h1>
+          <p>Generate, repair, explain, or optimize code specifically for your processor. Every AI result is checked by the local assembler before it can be loaded into the simulator.</p>
+        </div>
+        <div id="ai-connection-card" class="ai-connection-card checking">
+          <span class="ai-orb" aria-hidden="true"></span>
+          <div><small>SERVER CONNECTION</small><strong id="ai-connection-title">Checking Gemini…</strong><em id="ai-model-name">Secure backend</em></div>
+        </div>
+      </section>
+
+      <section class="ai-workspace">
+        <article class="panel ai-request-panel">
+          <header class="panel-header">
+            <div><p class="section-kicker">01 · REQUEST</p><h2>What should the processor do?</h2></div>
+            <span class="count-badge">GEMINI</span>
+          </header>
+          <div class="ai-mode-picker" role="group" aria-label="AI task">
+            <button class="ai-mode active" type="button" data-ai-action="generate">Generate</button>
+            <button class="ai-mode" type="button" data-ai-action="fix">Fix errors</button>
+            <button class="ai-mode" type="button" data-ai-action="explain">Explain</button>
+            <button class="ai-mode" type="button" data-ai-action="optimize">Optimize</button>
+          </div>
+          <label class="ai-prompt-label" for="ai-prompt">PROBLEM OR INSTRUCTIONS</label>
+          <textarea id="ai-prompt" class="ai-prompt" spellcheck="true" placeholder="Example: Add the numbers from 1 to 10, put the result in r3, and store it at memory address 0."></textarea>
+          <label class="include-source">
+            <input id="ai-include-source" type="checkbox">
+            <span>Include the current assembly editor contents</span>
+          </label>
+          <div class="ai-request-footer">
+            <p>The API key stays in <code>GEMINI_API_KEY</code> on the Node server and is never sent to this page.</p>
+            <button id="ai-submit" class="button button-primary ai-submit" type="button"><span aria-hidden="true">✦</span><span id="ai-submit-label">Ask Gemini</span></button>
+          </div>
+        </article>
+
+        <article class="panel ai-response-panel">
+          <header class="panel-header">
+            <div><p class="section-kicker">02 · REVIEW</p><h2 id="ai-result-title">AI response</h2></div>
+            <span id="ai-validation-badge" class="validation-badge idle">WAITING</span>
+          </header>
+          <div id="ai-empty-state" class="ai-empty-state">
+            <span aria-hidden="true">✦</span>
+            <strong>No response yet</strong>
+            <p>Choose an action, describe your problem, and ask Gemini. Generated assembly appears here for validation.</p>
+          </div>
+          <div id="ai-result" class="ai-result" hidden>
+            <div class="ai-code-head"><span>GENERATED ASSEMBLY</span><button id="ai-copy" class="mini-button" type="button">Copy</button></div>
+            <textarea id="ai-result-code" class="ai-result-code" spellcheck="false" aria-label="AI generated assembly"></textarea>
+            <div class="ai-explanation">
+              <span>EXPLANATION</span>
+              <p id="ai-explanation-text"></p>
+              <div id="ai-response-notes" class="ai-response-notes"></div>
+            </div>
+            <div class="ai-result-actions">
+              <button id="ai-validate" class="button" type="button">✓ Validate</button>
+              <button id="ai-load" class="button button-primary" type="button">Load into simulator</button>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="ai-info-grid">
+        <article class="panel ai-info-card">
+          <p class="section-kicker">SUPPORTED OUTPUT</p>
+          <h2>Bound to your instruction set</h2>
+          <p>Gemini is prompted to use only <code>add sub and or slt addi lw sw beq j nop</code>, registers <code>r0–r31</code>, signed 16-bit immediates, labels, and word-aligned memory.</p>
+        </article>
+        <article class="panel ai-info-card">
+          <p class="section-kicker">VALIDATION GATE</p>
+          <h2>AI code is not trusted blindly</h2>
+          <p>The same deterministic assembler used by the simulator validates every result. Unsupported instructions, malformed operands, duplicate labels, and out-of-range values are sent to the Error Log.</p>
+        </article>
+        <article class="panel ai-info-card">
+          <p class="section-kicker">START THE BACKEND</p>
+          <h2>One environment variable</h2>
+          <code>GEMINI_API_KEY=your_key npm run serve</code>
+          <p>Optionally choose a compatible model with <code>GEMINI_MODEL</code>. The default is <code>gemini-2.5-flash</code>.</p>
+        </article>
+      </section>
+    </div>
   </main>
+
+  <div id="error-backdrop" class="error-backdrop" hidden></div>
+  <aside id="error-drawer" class="error-drawer" aria-labelledby="error-log-title" hidden>
+    <header>
+      <div><p class="section-kicker">DIAGNOSTICS</p><h2 id="error-log-title">Error Log</h2></div>
+      <button id="error-log-close" class="drawer-close" type="button" aria-label="Close error log">×</button>
+    </header>
+    <div class="error-log-summary">
+      <span id="error-summary">No errors recorded</span>
+      <button id="error-log-clear" class="mini-button" type="button">Clear log</button>
+    </div>
+    <div id="error-log-list" class="error-log-list" aria-live="polite">
+      <div class="error-log-empty"><span>✓</span><strong>Everything looks clean</strong><small>Assembler and AI diagnostics will appear here.</small></div>
+    </div>
+  </aside>
 
   <footer>
     <span>Behavioral companion to <code>pipeline_cpu.v</code></span>

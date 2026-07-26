@@ -21,7 +21,10 @@ words), then exposes the state of every pipeline stage on each clock:
 - taken-branch and jump flushes
 - all 32 registers, data memory, CPI, and a 200-cycle trace
 - local `.asm`/`.hex` import, `program.hex` download, and CSV trace export
-- assembler errors with source line numbers
+- a persistent **Error Log** for assembler line errors, AI validation failures,
+  backend errors, and warnings
+- a secure **Gemini AI** tab that generates, fixes, explains, and optimizes code
+  for this processor's exact instruction subset
 
 Run it locally from the repository root:
 
@@ -44,6 +47,33 @@ nop .word
 Registers may be written as `r0`-`r31` (or standard MIPS aliases), branch and
 jump targets may use labels, and pasting one hexadecimal word per line is
 automatically recognized as `program.hex` input.
+
+### Gemini AI Setup
+
+Create an API key in Google AI Studio and export it only in the server process.
+Never put the key in `simulator/app.js` or commit it to Git.
+
+**macOS/Linux:**
+
+```bash
+export GEMINI_API_KEY="your_key_here"
+# Optional: export GEMINI_MODEL="gemini-2.5-flash"
+npm run serve
+```
+
+**Windows PowerShell:**
+
+```powershell
+$env:GEMINI_API_KEY="your_key_here"
+$env:GEMINI_MODEL="gemini-2.5-flash" # optional
+npm run serve
+```
+
+The simulator and Architecture tab still work without a key; only AI requests
+are disabled. The Node server calls Gemini, requests structured JSON, and
+returns generated assembly to the browser. The deterministic local assembler
+then validates that code before enabling **Load into simulator**. The default
+model can be changed through `GEMINI_MODEL` without editing source code.
 
 The browser model is deliberately separate from the synthesizable RTL: it is
 fast and inspectable for teaching/debugging, while the Verilog remains the
@@ -98,8 +128,11 @@ IF -> ID -> EX -> MEM -> WB
 | `program.hex` | Sample machine-code program (hex, one instr/line) |
 | `tb_pipeline_cpu.v` | Self-checking sample-program RTL testbench with a cycle trace |
 | `tb_regression.v` | Directed RTL tests for stalls, redirects, and forwarding |
-| `simulator/` | Browser UI, assembler, and cycle-accurate behavioral model |
+| `simulator/` | Browser UI, assembler, architecture explorer, AI tab, and error log |
+| `server.js` | Dependency-free static server and secure Gemini API proxy |
+| `.env.example` | Gemini/server environment-variable reference (contains no real key) |
 | `test/simulator.test.js` | Directed behavioral simulator tests |
+| `test/server.test.js` | Gemini prompt, structured response, and server API tests |
 | `Makefile` | JavaScript and Icarus Verilog test/serve commands |
 
 ## Sample Program (`program.hex`)

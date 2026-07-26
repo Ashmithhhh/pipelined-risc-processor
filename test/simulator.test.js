@@ -128,12 +128,14 @@ test("assembler reports source line errors", () => {
   assert.throws(() => assemble("same: nop\nsame: nop"), /duplicate label/);
 });
 
-test("architecture explorer includes the live flow and model reference sections", () => {
+test("UI includes architecture, Gemini assistant, and error-log sections", () => {
   const html = readFileSync(new URL("../simulator/index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("../simulator/app.js", import.meta.url), "utf8");
   for (const id of [
     "architecture-tab", "architecture-stages", "architecture-event",
     "inspector-content", "control-matrix", "architecture-step",
+    "ai-tab", "ai-prompt", "ai-result-code", "ai-submit",
+    "error-drawer", "error-log-list", "error-count",
   ]) {
     assert.match(html, new RegExp(`id=["']${id}["']`), `missing #${id}`);
   }

@@ -1,11 +1,12 @@
 {
   "name": "pipelined-risc-processor",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
-  "description": "Verilog 5-stage RISC CPU with a cycle-accurate browser simulator",
+  "description": "Verilog 5-stage RISC CPU with a cycle-accurate browser simulator and Gemini assistant",
   "scripts": {
     "test": "node --test",
-    "serve": "python3 -m http.server 8000"
+    "serve": "node server.js",
+    "serve:static": "python3 -m http.server 8000"
   }
 }
