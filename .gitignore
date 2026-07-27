@@ -1,6 +1,7 @@
 sim*.out
 wave.vcd
 *.vvp
+verification-report.json
 .DS_Store
 downloads/
 pipelined-risc-processor-simulator.zip

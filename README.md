@@ -128,6 +128,8 @@ IF -> ID -> EX -> MEM -> WB
 | `program.hex` | Sample machine-code program (hex, one instr/line) |
 | `tb_pipeline_cpu.v` | Self-checking sample-program RTL testbench with a cycle trace |
 | `tb_regression.v` | Directed RTL tests for stalls, redirects, and forwarding |
+| `tb_differential.v` | Machine-readable per-cycle RTL trace testbench |
+| `tools/differential.js` | RTL-vs-JavaScript trace and state comparator |
 | `simulator/` | Browser UI, assembler, architecture explorer, AI tab, and error log |
 | `server.js` | Dependency-free static server and secure Gemini API proxy |
 | `.env.example` | Gemini/server environment-variable reference (contains no real key) |
@@ -196,6 +198,10 @@ recompile/run.
 - `program_branch.hex` — tests both a taken `beq` (skips one instruction)
   and a not-taken `beq` (falls through normally). Expect final
   `r4 = 0` (skipped), `r5 = 11`, `r6 = 22`.
+- `program_load_use.hex` — combines store forwarding, a true load-use stall,
+  and an I-type destination that must not cause a false stall.
+- `program_control_priority.hex` — proves that an older taken branch overrides
+  a younger wrong-path jump in ID.
 
 ## How to Run a Different Test Program
 
@@ -249,8 +255,26 @@ mem[0] = 20
 ## Automated Tests
 
 ```bash
-npm test       # assembler + behavioral pipeline tests (Node.js)
+npm test       # assembler, behavioral pipeline, server, and comparator tests
 make test-hdl  # sample testbench + directed RTL regressions (Icarus Verilog)
+npm run verify # cycle-by-cycle RTL ↔ JavaScript differential verification
+```
+
+The differential verifier compiles `tb_differential.v`, runs every bundled hex
+program through both `pipeline_cpu.v` and `simulator/core.js`, and compares:
+
+- pre-edge PC, IF/ID instructions, stall, branch, and jump signals
+- forwarding selections and the EX ALU result
+- memory controls, address, and store data
+- effective WB register, destination, and value
+- post-edge PC, all 32 registers, and all 256 data-memory words on every cycle
+
+A mismatch exits with a failure and identifies the first cycle, signal,
+JavaScript value, and RTL value. A machine-readable summary is written to
+`verification-report.json`. To verify one custom program:
+
+```bash
+npm run verify -- path/to/program.hex
 ```
 
 The RTL regression suite specifically checks a true load-use stall, avoids

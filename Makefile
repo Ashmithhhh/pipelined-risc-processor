@@ -2,12 +2,17 @@ RTL_SOURCES := defines.v pc.v instr_mem.v reg_file.v alu.v alu_control.v \
 	control_unit.v hazard_unit.v forwarding_unit.v data_mem.v if_id_reg.v \
 	id_ex_reg.v ex_mem_reg.v mem_wb_reg.v pipeline_cpu.v
 
-.PHONY: test test-js test-hdl test-hdl-main test-hdl-regression check-iverilog serve serve-static clean
+.PHONY: test test-js test-all verify test-hdl test-hdl-main test-hdl-regression check-iverilog serve serve-static clean
 
 test: test-js
 
 test-js:
 	node --test
+
+test-all: test-js test-hdl verify
+
+verify: check-iverilog
+	node tools/differential.js
 
 test-hdl: test-hdl-main test-hdl-regression
 
@@ -21,6 +26,7 @@ test-hdl-regression: check-iverilog
 
 check-iverilog:
 	@command -v iverilog >/dev/null || { echo "error: iverilog is required for HDL tests" >&2; exit 1; }
+	@command -v vvp >/dev/null || { echo "error: vvp is required for HDL tests" >&2; exit 1; }
 
 serve:
 	node server.js
@@ -29,4 +35,4 @@ serve-static:
 	python3 -m http.server 8000
 
 clean:
-	rm -f sim.out sim-main.out sim-regression.out wave.vcd
+	rm -f sim.out sim-main.out sim-regression.out wave.vcd verification-report.json

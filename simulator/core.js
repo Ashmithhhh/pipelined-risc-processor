@@ -465,6 +465,7 @@ export class PipelineSimulator {
 
     const cycle = this.cycle + 1;
     const pcBefore = this.pc >>> 0;
+    const ifStageBefore = this.fetch();
     const stagesBefore = this.getStages().map((stage) => stage.assembly);
     const wbResult = this.memwb.valid
       ? (this.memwb.memToReg ? this.memwb.readData : this.memwb.aluResult) >>> 0
@@ -603,6 +604,29 @@ export class PipelineSimulator {
       } : emptyStage();
     }
 
+    // Signals sampled immediately before the active clock edge. The
+    // differential verifier compares these against the RTL testbench trace.
+    const forwardingCode = (source) => source === "EX/MEM" ? 1 : source === "MEM/WB" ? 2 : 0;
+    const rtlSignals = {
+      ifInstr: ifStageBefore.valid ? ifStageBefore.word >>> 0 : 0,
+      idInstr: this.ifid.valid ? this.ifid.word >>> 0 : 0,
+      exValid: Boolean(this.idex.valid),
+      memValid: Boolean(this.exmem.valid),
+      stall: hazardStall,
+      branch: branchTaken,
+      jump: jumpTaken,
+      forwardA: forwardingCode(forwardA.source),
+      forwardB: forwardingCode(forwardB.source),
+      exResult: exResult >>> 0,
+      memRead: Boolean(this.exmem.valid && this.exmem.memRead),
+      memWrite: Boolean(this.exmem.valid && this.exmem.memWrite),
+      memAddress: this.exmem.valid ? this.exmem.aluResult >>> 0 : 0,
+      memWriteData: this.exmem.valid ? this.exmem.writeData >>> 0 : 0,
+      wbWrite: Boolean(registerWrite),
+      wbRegister: this.memwb.valid ? this.memwb.writeReg : 0,
+      wbData: wbResult,
+    };
+
     this.pc = nextPc >>> 0;
     this.ifid = nextIfid;
     this.idex = nextIdex;
@@ -625,6 +649,7 @@ export class PipelineSimulator {
       forwardB: exInstruction.usesRt ? forwardB.source : "—",
       registerWrite,
       memoryWrite,
+      rtl: { ...rtlSignals, postPc: this.pc >>> 0 },
     };
     this.lastEvent = event;
     this.history.unshift(event);
